@@ -1,0 +1,14 @@
+const ESTADOS = ['NUEVO', 'ASIGNADO', 'EN_PROCESO', 'RESUELTO', 'CERRADO'];
+const PRIORIDADES = ['BAJA', 'MEDIA', 'ALTA', 'CRITICA'];
+const CATEGORIAS = ['HARDWARE', 'SOFTWARE', 'RED', 'ACCESO', 'OTRO'];
+
+// Transiciones permitidas entre estados
+const TRANSICIONES = {
+  NUEVO: ['ASIGNADO'],
+  ASIGNADO: ['EN_PROCESO'],
+  EN_PROCESO: ['RESUELTO'],
+  RESUELTO: ['CERRADO', 'EN_PROCESO'],
+  CERRADO: [],
+};
+
+module.exports = { ESTADOS, PRIORIDADES, CATEGORIAS, TRANSICIONES };
