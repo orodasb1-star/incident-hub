@@ -1,0 +1,86 @@
+# Pipeline CI de IT Incident Hub (Azure Pipelines)
+# Corre en el agente autohospedado del pool "SelfHosted".
+
+trigger:
+  branches:
+    include: [ main, feature/*, fix/*, refactor/*, chore/* ]
+
+pool:
+  name: SelfHosted
+
+variables:
+  nodeVersion: '20.x'
+
+stages:
+  - stage: CI
+    displayName: 'CI: build, pruebas, seguridad y artefacto'
+    jobs:
+      - job: Build
+        steps:
+          - checkout: self
+            clean: true
+
+          - task: NodeTool@0
+            displayName: 'Instalar Node.js $(nodeVersion)'
+            inputs:
+              versionSpec: $(nodeVersion)
+
+          - script: npm ci
+            displayName: 'Backend: instalar dependencias (npm ci)'
+            workingDirectory: backend
+
+          - script: npm run lint
+            displayName: 'Backend: lint'
+            workingDirectory: backend
+
+          - script: npm test
+            displayName: 'Backend: pruebas unitarias'
+            workingDirectory: backend
+
+          - task: PublishTestResults@2
+            displayName: 'Publicar resultados de pruebas'
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: 'backend/reports/junit.xml'
+              failTaskOnMissingResultsFile: false
+
+          - script: npm audit --omit=dev --audit-level=high
+            displayName: 'Backend: auditoria de dependencias (produccion, high+)'
+            workingDirectory: backend
+
+          - script: npm ci && npm run build
+            displayName: 'Frontend: instalar y compilar'
+            workingDirectory: frontend
+
+          - script: npm audit --omit=dev --audit-level=high
+            displayName: 'Frontend: auditoria de dependencias (produccion, high+)'
+            workingDirectory: frontend
+
+          - task: CopyFiles@2
+            displayName: 'Preparar paquete'
+            inputs:
+              SourceFolder: '$(Build.SourcesDirectory)'
+              Contents: |
+                backend/src/**
+                backend/package.json
+                backend/package-lock.json
+                backend/.env.example
+                frontend/dist/**
+                database/**
+                tests/smoke.js
+              TargetFolder: '$(Build.ArtifactStagingDirectory)/incident-hub'
+
+          - task: ArchiveFiles@2
+            displayName: 'Empaquetar (zip)'
+            inputs:
+              rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/incident-hub'
+              includeRootFolder: true
+              archiveType: zip
+              archiveFile: '$(Build.ArtifactStagingDirectory)/incident-hub-$(Build.BuildNumber).zip'
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publicar artefacto'
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)/incident-hub-$(Build.BuildNumber).zip'
+              artifact: 'incident-hub'
