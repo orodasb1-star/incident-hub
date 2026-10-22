@@ -5,7 +5,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "test": "jest --coverage",
+    "test": "jest --coverage --reporters=default --reporters=jest-junit",
     "lint": "eslint src tests --ext .js"
   },
   "dependencies": {
@@ -18,5 +18,14 @@
     "jest": "^29.7.0",
     "supertest": "^7.0.0"
   },
-  "jest": { "testEnvironment": "node", "roots": ["<rootDir>/tests"] }
+  "jest": {
+    "testEnvironment": "node",
+    "roots": [
+      "<rootDir>/tests"
+    ]
+  },
+  "jest-junit": {
+    "outputDirectory": "reports",
+    "outputName": "junit.xml"
+  }
 }
