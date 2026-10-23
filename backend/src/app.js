@@ -2,10 +2,13 @@ const express = require('express');
 const cors = require('cors');
 const { validarIncidente, validarEstado } = require('./validators');
 const { TRANSICIONES } = require('./constants');
+const { requestLogger } = require('./logger');
+const { errorHandler } = require('./errorHandler');
 
 function crearApp(repo) {
   const app = express();
   app.use(cors({ exposedHeaders: ['X-Total-Count', 'X-Page', 'X-Limit'] }));
+  app.use(requestLogger);
   app.use(express.json());
 
   app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
@@ -108,11 +111,8 @@ function crearApp(repo) {
     } catch (e) { next(e); }
   });
 
-  // eslint-disable-next-line no-unused-vars
-  app.use((err, _req, res, _next) => {
-    console.error(err);
-    res.status(500).json({ error: 'Error interno' });
-  });
+  app.use((_req, res) => res.status(404).json({ error: 'Ruta no encontrada' }));
+  app.use(errorHandler);
 
   return app;
 }
