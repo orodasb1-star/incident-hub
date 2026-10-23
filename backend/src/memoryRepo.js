@@ -15,12 +15,14 @@ function crearMemoryRepo() {
       incidentes.push(inc);
       return inc;
     },
-    async listar(filtros = {}) {
-      return incidentes.filter((i) =>
+    async listar(filtros = {}, { limit = 50, offset = 0 } = {}) {
+      const filtrados = incidentes.filter((i) =>
         (!filtros.estado || i.estado === filtros.estado) &&
         (!filtros.prioridad || i.prioridad === filtros.prioridad) &&
         (!filtros.categoria || i.categoria === filtros.categoria) &&
         (!filtros.tecnicoId || i.tecnicoId === Number(filtros.tecnicoId)));
+      const ordenados = [...filtrados].reverse(); // mas recientes primero, igual que PostgreSQL
+      return { items: ordenados.slice(offset, offset + limit), total: filtrados.length };
     },
     async obtener(id) { return incidentes.find((i) => i.id === Number(id)) || null; },
     async actualizar(id, cambios) {
