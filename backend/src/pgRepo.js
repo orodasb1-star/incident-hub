@@ -19,15 +19,18 @@ function crearPgRepo(connectionString = process.env.DATABASE_URL) {
         [d.titulo, d.descripcion, d.categoria, d.prioridad, d.usuario]);
       return mapInc(rows[0]);
     },
-    async listar(f = {}) {
+    async listar(f = {}, { limit = 50, offset = 0 } = {}) {
       const cond = []; const vals = [];
       if (f.estado) { vals.push(f.estado); cond.push(`estado = $${vals.length}`); }
       if (f.prioridad) { vals.push(f.prioridad); cond.push(`prioridad = $${vals.length}`); }
       if (f.categoria) { vals.push(f.categoria); cond.push(`categoria = $${vals.length}`); }
       if (f.tecnicoId) { vals.push(Number(f.tecnicoId)); cond.push(`tecnico_id = $${vals.length}`); }
       const where = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
-      const { rows } = await pool.query(`SELECT * FROM incidentes ${where} ORDER BY id DESC`, vals);
-      return rows.map(mapInc);
+      const total = await pool.query(`SELECT COUNT(*)::int AS n FROM incidentes ${where}`, vals);
+      const { rows } = await pool.query(
+        `SELECT * FROM incidentes ${where} ORDER BY id DESC LIMIT $${vals.length + 1} OFFSET $${vals.length + 2}`,
+        [...vals, limit, offset]);
+      return { items: rows.map(mapInc), total: total.rows[0].n };
     },
     async obtener(id) {
       const { rows } = await pool.query('SELECT * FROM incidentes WHERE id = $1', [id]);
@@ -58,7 +61,10 @@ function crearPgRepo(connectionString = process.env.DATABASE_URL) {
         'SELECT * FROM comentarios WHERE incidente_id = $1 ORDER BY id', [incidenteId]);
       return rows;
     },
-    async todos() { return this.listar({}); },
+    async todos() {
+      const { rows } = await pool.query('SELECT * FROM incidentes ORDER BY id DESC');
+      return rows.map(mapInc);
+    },
   };
 }
 

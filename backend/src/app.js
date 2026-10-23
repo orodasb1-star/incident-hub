@@ -5,7 +5,7 @@ const { TRANSICIONES } = require('./constants');
 
 function crearApp(repo) {
   const app = express();
-  app.use(cors());
+  app.use(cors({ exposedHeaders: ['X-Total-Count', 'X-Page', 'X-Limit'] }));
   app.use(express.json());
 
   app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
@@ -20,8 +20,17 @@ function crearApp(repo) {
     } catch (e) { next(e); }
   });
 
+  // Paginacion: ?page=1&limit=50 (limite maximo 100). El total viaja en el header X-Total-Count.
   app.get('/api/incidentes', async (req, res, next) => {
-    try { res.json(await repo.listar(req.query)); } catch (e) { next(e); }
+    try {
+      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const { items, total } = await repo.listar(req.query, { limit, offset: (page - 1) * limit });
+      res.set('X-Total-Count', String(total));
+      res.set('X-Page', String(page));
+      res.set('X-Limit', String(limit));
+      res.json(items);
+    } catch (e) { next(e); }
   });
 
   app.get('/api/incidentes/:id', async (req, res, next) => {
