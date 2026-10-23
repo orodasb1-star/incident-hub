@@ -1,0 +1,65 @@
+# Workflow complementario de GitHub Actions: valida cada push y Pull Request
+# (lint, pruebas, build del frontend y revision de dependencias).
+name: CI - GitHub Actions
+
+on:
+  push:
+    branches: [ main, 'feature/**', 'fix/**', 'refactor/**', 'chore/**' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend - lint, pruebas y auditoria
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - name: Auditoria de dependencias de produccion (falla con high o critical)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Reporte completo de dependencias (informativo)
+        run: npm audit || true
+
+  frontend:
+    name: Frontend - build y auditoria
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+
+  dependency-review:
+    name: Revision de dependencias del PR
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
