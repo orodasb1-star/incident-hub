@@ -1,9 +1,16 @@
-# Pipeline CI de IT Incident Hub (Azure Pipelines)
+# Pipeline CI/CD de IT Incident Hub (Azure Pipelines)
 # Corre en el agente autohospedado del pool "SelfHosted".
+#
+# Estrategia de release:
+#   - Ramas feature/fix/refactor/chore -> solo CI (build, pruebas, seguridad, artefacto)
+#   - main                             -> CI + despliegue automatico a QA
+#   - tag vX.Y.Z                       -> CI + QA + aprobacion manual + Produccion
 
 trigger:
   branches:
     include: [ main, feature/*, fix/*, refactor/*, chore/* ]
+  tags:
+    include: [ 'v*' ]
 
 pool:
   name: SelfHosted
@@ -69,6 +76,7 @@ stages:
                 frontend/dist/**
                 database/**
                 tests/smoke.js
+                devops/validar-despliegue.js
               TargetFolder: '$(Build.ArtifactStagingDirectory)/incident-hub'
 
           - task: ArchiveFiles@2
@@ -84,3 +92,73 @@ stages:
             inputs:
               targetPath: '$(Build.ArtifactStagingDirectory)/incident-hub-$(Build.BuildNumber).zip'
               artifact: 'incident-hub'
+
+  - stage: QA
+    displayName: 'Despliegue a QA'
+    dependsOn: CI
+    condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/v')))
+    variables:
+      - group: incident-hub-secrets
+    jobs:
+      - deployment: DeployQA
+        displayName: 'Desplegar y validar en QA'
+        environment: 'incident-hub-qa'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: NodeTool@0
+                  inputs:
+                    versionSpec: $(nodeVersion)
+                - task: ExtractFiles@1
+                  displayName: 'Extraer artefacto'
+                  inputs:
+                    archiveFilePatterns: '$(Pipeline.Workspace)/incident-hub/*.zip'
+                    destinationFolder: '$(Pipeline.Workspace)/deploy-qa'
+                    cleanDestinationFolder: true
+                - script: node -e "if(!process.env.DATABASE_URL){console.error('Falta el secreto DATABASE_URL');process.exit(1)}console.log('Secreto DATABASE_URL disponible (valor oculto)')"
+                  displayName: 'Verificar secretos del ambiente'
+                  env:
+                    DATABASE_URL: $(DATABASE_URL)
+                - script: npm ci --omit=dev
+                  displayName: 'Instalar dependencias de produccion'
+                  workingDirectory: '$(Pipeline.Workspace)/deploy-qa/incident-hub/backend'
+                - script: node devops/validar-despliegue.js . 3100
+                  displayName: 'Prueba de humo en QA'
+                  workingDirectory: '$(Pipeline.Workspace)/deploy-qa/incident-hub'
+
+  - stage: Produccion
+    displayName: 'Despliegue a Produccion'
+    dependsOn: QA
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/v'))
+    variables:
+      - group: incident-hub-secrets
+    jobs:
+      - deployment: DeployProd
+        displayName: 'Desplegar y validar en Produccion'
+        environment: 'incident-hub-prod'   # La aprobacion manual se configura en el Environment
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: NodeTool@0
+                  inputs:
+                    versionSpec: $(nodeVersion)
+                - task: ExtractFiles@1
+                  displayName: 'Extraer artefacto'
+                  inputs:
+                    archiveFilePatterns: '$(Pipeline.Workspace)/incident-hub/*.zip'
+                    destinationFolder: '$(Pipeline.Workspace)/deploy-prod'
+                    cleanDestinationFolder: true
+                - script: node -e "if(!process.env.DATABASE_URL){console.error('Falta el secreto DATABASE_URL');process.exit(1)}console.log('Secreto DATABASE_URL disponible (valor oculto)')"
+                  displayName: 'Verificar secretos del ambiente'
+                  env:
+                    DATABASE_URL: $(DATABASE_URL)
+                - script: npm ci --omit=dev
+                  displayName: 'Instalar dependencias de produccion'
+                  workingDirectory: '$(Pipeline.Workspace)/deploy-prod/incident-hub/backend'
+                - script: node devops/validar-despliegue.js . 3200
+                  displayName: 'Prueba de humo en Produccion'
+                  workingDirectory: '$(Pipeline.Workspace)/deploy-prod/incident-hub'
+                - script: echo Version $(Build.SourceBranchName) liberada en Produccion
+                  displayName: 'Registrar liberacion'
