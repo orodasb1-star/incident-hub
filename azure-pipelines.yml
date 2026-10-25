@@ -110,12 +110,14 @@ stages:
                 - task: NodeTool@0
                   inputs:
                     versionSpec: $(nodeVersion)
-                - task: ExtractFiles@1
+                - powershell: |
+                    $destino = "$(Pipeline.Workspace)\deploy-qa"
+                    if (Test-Path $destino) { Remove-Item $destino -Recurse -Force }
+                    New-Item -ItemType Directory -Path $destino | Out-Null
+                    $zip = Get-ChildItem "$(Pipeline.Workspace)\incident-hub\*.zip" | Select-Object -First 1
+                    if (-not $zip) { throw "No se encontro el artefacto zip" }
+                    Expand-Archive -Path $zip.FullName -DestinationPath $destino -Force
                   displayName: 'Extraer artefacto'
-                  inputs:
-                    archiveFilePatterns: '$(Pipeline.Workspace)/incident-hub/*.zip'
-                    destinationFolder: '$(Pipeline.Workspace)/deploy-qa'
-                    cleanDestinationFolder: true
                 - script: node -e "if(!process.env.DATABASE_URL){console.error('Falta el secreto DATABASE_URL');process.exit(1)}console.log('Secreto DATABASE_URL disponible (valor oculto)')"
                   displayName: 'Verificar secretos del ambiente'
                   env:
@@ -144,12 +146,14 @@ stages:
                 - task: NodeTool@0
                   inputs:
                     versionSpec: $(nodeVersion)
-                - task: ExtractFiles@1
+                - powershell: |
+                    $destino = "$(Pipeline.Workspace)\deploy-prod"
+                    if (Test-Path $destino) { Remove-Item $destino -Recurse -Force }
+                    New-Item -ItemType Directory -Path $destino | Out-Null
+                    $zip = Get-ChildItem "$(Pipeline.Workspace)\incident-hub\*.zip" | Select-Object -First 1
+                    if (-not $zip) { throw "No se encontro el artefacto zip" }
+                    Expand-Archive -Path $zip.FullName -DestinationPath $destino -Force
                   displayName: 'Extraer artefacto'
-                  inputs:
-                    archiveFilePatterns: '$(Pipeline.Workspace)/incident-hub/*.zip'
-                    destinationFolder: '$(Pipeline.Workspace)/deploy-prod'
-                    cleanDestinationFolder: true
                 - script: node -e "if(!process.env.DATABASE_URL){console.error('Falta el secreto DATABASE_URL');process.exit(1)}console.log('Secreto DATABASE_URL disponible (valor oculto)')"
                   displayName: 'Verificar secretos del ambiente'
                   env:
